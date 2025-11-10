@@ -76,7 +76,7 @@ npm run dev            # 或 npm start
 
 ## 部署流程（Vercel 示范）
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/DriftingBoats/SendEmail-Site)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/DriftingBoats/SendMail-Site)
 
 1. **准备仓库**：确保 `package.json`、`src/`、`public/`、`vercel.json`（若没有请创建）都在根目录，并且 `.env` 未提交。
 2. **创建 `vercel.json`（示例）**
