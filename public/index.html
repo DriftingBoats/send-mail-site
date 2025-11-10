@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>定时发送邮件 | SMTP Scheduler</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="auth-screen" class="auth-screen">
+      <form id="login-form" class="panel auth-panel">
+        <h2>登录</h2>
+        <p class="helper-text">请输入管理员账号信息以管理任务。</p>
+        <div class="field">
+          <label for="login-username">用户名</label>
+          <input type="text" id="login-username" autocomplete="username" required />
+        </div>
+        <div class="field">
+          <label for="login-password">密码</label>
+          <input type="password" id="login-password" autocomplete="current-password" required />
+        </div>
+        <div class="form-actions">
+          <button type="submit">登录</button>
+        </div>
+        <div id="login-message" class="flash hidden" role="status" aria-live="polite"></div>
+      </form>
+    </div>
+
+    <div id="app-shell" class="hidden">
+      <header>
+        <div>
+          <h1>定时发送邮件</h1>
+          <p>为每个任务配置独立 SMTP，灵活管理多套账号</p>
+        </div>
+        <div class="header-actions">
+          <button id="logout-btn" class="ghost-button">退出登录</button>
+        </div>
+      </header>
+
+      <main>
+        <section class="panel">
+          <h2>新建发送任务</h2>
+          <form id="task-form">
+            <div class="field">
+              <label for="name">任务名称（可选）</label>
+              <input type="text" id="name" name="name" placeholder="例如：季度更新邮件" />
+            </div>
+
+            <div class="field">
+              <label>收件人（多选）</label>
+              <div class="recipient-input">
+                <input
+                  type="email"
+                  id="recipient-input"
+                  placeholder="输入邮箱，按 Enter 或点击添加"
+                />
+                <button type="button" id="add-recipient">添加</button>
+              </div>
+              <div id="recipient-list" class="chip-list" aria-live="polite"></div>
+            </div>
+
+            <div class="field halves">
+              <div>
+                <label for="subject">主题</label>
+                <input type="text" id="subject" name="subject" required />
+              </div>
+              <div>
+                <label for="sendTime">发送时间</label>
+                <input type="datetime-local" id="sendTime" name="sendTime" required />
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="body">正文</label>
+              <textarea id="body" rows="6" name="body" placeholder="支持纯文本，可自动转为 HTML"></textarea>
+            </div>
+
+            <div class="field recurrence-toggle">
+              <label>
+                <input type="checkbox" id="isRecurring" name="isRecurring" />
+                循环发送
+              </label>
+            </div>
+
+            <div id="recurrence-fields" class="field halves hidden">
+              <div>
+                <label for="recurrenceValue">间隔</label>
+                <input type="number" id="recurrenceValue" name="recurrenceValue" min="1" value="3" />
+              </div>
+              <div>
+                <label for="recurrenceUnit">单位</label>
+                <select id="recurrenceUnit" name="recurrenceUnit">
+                  <option value="days">天</option>
+                  <option value="weeks">周</option>
+                  <option value="months" selected>月</option>
+                  <option value="hours">小时</option>
+                  <option value="minutes">分钟</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field">
+              <label>SMTP 设置（随任务保存）</label>
+              <p class="helper-text">支持为不同任务配置不同的发件服务器与账号。</p>
+            </div>
+            <div class="field halves">
+              <div>
+                <label for="smtp-host">服务器地址</label>
+                <input type="text" id="smtp-host" required />
+              </div>
+              <div>
+                <label for="smtp-port">端口</label>
+                <input type="number" id="smtp-port" min="1" value="587" required />
+              </div>
+            </div>
+            <div class="field halves">
+              <div>
+                <label for="smtp-user">用户名</label>
+                <input type="text" id="smtp-user" autocomplete="off" required />
+              </div>
+              <div>
+                <label for="smtp-pass">密码 / 授权码</label>
+                <input type="password" id="smtp-pass" autocomplete="new-password" required />
+              </div>
+            </div>
+            <div class="field halves">
+              <div>
+                <label for="smtp-from">发件人（可包含名称）</label>
+                <input type="text" id="smtp-from" placeholder="Scheduler <sender@example.com>" />
+              </div>
+              <div class="checkbox-field">
+                <label>
+                  <input type="checkbox" id="smtp-secure" />
+                  SSL/TLS (465)
+                </label>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit">保存任务</button>
+            </div>
+
+            <p class="helper-text">
+              发送任务会保存在服务器本地 <code>data/tasks.json</code> 中，可在界面下方查看和删除。
+            </p>
+            <div id="form-message" class="flash hidden" role="status" aria-live="polite"></div>
+          </form>
+        </section>
+
+        <section class="panel">
+          <h2>任务列表</h2>
+          <div id="tasks-empty" class="empty-state">暂无任务，快去新建一个吧。</div>
+          <div class="table-wrapper">
+            <table id="tasks-table" class="hidden">
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>收件人</th>
+                  <th>主题</th>
+                  <th>发件人</th>
+                  <th>下次发送</th>
+                  <th>循环</th>
+                  <th>状态</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="tasks-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="task-row-template">
+      <tr>
+        <td class="task-name"></td>
+        <td class="task-recipients">
+          <div class="chip-list"></div>
+        </td>
+        <td class="task-subject"></td>
+        <td class="task-from"></td>
+        <td class="task-next"></td>
+        <td class="task-loop"></td>
+        <td class="task-status"></td>
+        <td class="task-actions">
+          <button class="ghost edit-task">编辑</button>
+          <button class="ghost send-now">立即发送</button>
+          <button class="danger">删除</button>
+        </td>
+      </tr>
+    </template>
+
+    <div id="edit-modal" class="modal hidden">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>编辑任务</h3>
+          <button type="button" class="ghost close-modal" id="edit-cancel" aria-label="关闭">×</button>
+        </div>
+        <form id="edit-form" class="modal-body">
+          <div class="field">
+            <label>收件人</label>
+            <div class="recipient-input">
+              <input
+                type="email"
+                id="edit-recipient-input"
+                placeholder="输入邮箱，按 Enter 或点击添加"
+              />
+              <button type="button" id="edit-add-recipient">添加</button>
+            </div>
+            <div id="edit-recipient-list" class="chip-list" aria-live="polite"></div>
+          </div>
+          <div class="field">
+            <label for="edit-subject">主题</label>
+            <input type="text" id="edit-subject" required />
+          </div>
+          <div class="field">
+            <label for="edit-body">正文</label>
+            <textarea id="edit-body" rows="6" required></textarea>
+          </div>
+          <div class="field">
+            <label for="edit-sendTime">下次发送时间</label>
+            <input type="datetime-local" id="edit-sendTime" required />
+          </div>
+          <div class="field recurrence-toggle">
+            <label>
+              <input type="checkbox" id="edit-isRecurring" />
+              循环发送
+            </label>
+          </div>
+          <div id="edit-recurrence-fields" class="field halves hidden">
+            <div>
+              <label for="edit-recurrenceValue">间隔</label>
+              <input type="number" id="edit-recurrenceValue" min="1" value="1" />
+            </div>
+            <div>
+              <label for="edit-recurrenceUnit">单位</label>
+              <select id="edit-recurrenceUnit">
+                <option value="days">天</option>
+                <option value="weeks">周</option>
+                <option value="months">月</option>
+                <option value="hours">小时</option>
+                <option value="minutes">分钟</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>SMTP 设置</label>
+            <p class="helper-text">修改后会覆盖当前任务的 SMTP 配置。</p>
+          </div>
+          <div class="field halves">
+            <div>
+              <label for="edit-smtp-host">服务器地址</label>
+              <input type="text" id="edit-smtp-host" required />
+            </div>
+            <div>
+              <label for="edit-smtp-port">端口</label>
+              <input type="number" id="edit-smtp-port" min="1" required />
+            </div>
+          </div>
+          <div class="field halves">
+            <div>
+              <label for="edit-smtp-user">用户名</label>
+              <input type="text" id="edit-smtp-user" autocomplete="off" required />
+            </div>
+            <div>
+              <label for="edit-smtp-pass">密码 / 授权码</label>
+              <input type="password" id="edit-smtp-pass" autocomplete="new-password" required />
+            </div>
+          </div>
+          <div class="field halves">
+            <div>
+              <label for="edit-smtp-from">发件人</label>
+              <input type="text" id="edit-smtp-from" />
+            </div>
+            <div class="checkbox-field">
+              <label>
+                <input type="checkbox" id="edit-smtp-secure" />
+                SSL/TLS (465)
+              </label>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="ghost" id="edit-cancel-cta">取消</button>
+            <button type="submit">保存变更</button>
+          </div>
+          <div id="edit-message" class="flash hidden" role="status" aria-live="polite"></div>
+        </form>
+      </div>
+    </div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
